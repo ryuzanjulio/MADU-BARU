@@ -2,8 +2,13 @@
 //  sw.js — Service Worker PWA  v9
 //  PLN UP3 Jayapura — Monitoring Gardu
 //
-//  Perubahan v9:
-//  - Cache name updated to gardu-pln-v9
+//  Perubahan v9 (dari v8):
+//  - CACHE_NAME dinaikkan ke gardu-pln-v9 untuk force refresh
+//    setelah update index.html v36 (sistem auth token + PIN per user)
+//  - kirimAntrianInspeksi() pakai fetch POST + Content-Type: text/plain
+//    agar lolos CORS Apps Script tanpa preflight
+//  - Foto ikut dalam satu payload (tidak terpisah lagi)
+//  - Notifikasi SYNC_SUCCESS dikirim ke semua tab
 // ============================================================
 
 var CACHE_NAME  = 'gardu-pln-v9';
@@ -98,6 +103,7 @@ function kirimAntrianInspeksi() {
   return bukaDB().then(function(db) {
     return getAllQueue(db).then(function(items) {
       if (!items || !items.length) return;
+      // Kirim satu per satu berurutan agar tidak membebani Apps Script
       return items.reduce(function(chain, item) {
         return chain.then(function() { return kirimSatu(db, item); });
       }, Promise.resolve());
