@@ -1954,19 +1954,38 @@ window.onload = function(){
 //   Longitude Papua: 130 s/d 141
 function normalizeCoord(val, isLat) {
   if (val === '' || val === null || val === undefined) return NaN;
-  var n = typeof val === 'number' ? val : parseFloat(String(val).replace(',','.'));
+  var s = String(val).trim();
+  // Ganti koma desimal format Indonesia (mis: "-2,608911") ke titik
+  // Hanya replace jika 1 koma dengan ≥ 4 digit di kanan (bukan pemisah ribuan)
+  var hasComma = s.indexOf(',') !== -1;
+  if (hasComma) {
+    var parts = s.split(',');
+    if (parts.length === 2 && parts[1].length >= 4) {
+      s = parts[0] + '.' + parts[1];
+    }
+  }
+  var n = typeof val === 'number' ? val : parseFloat(s);
   if (isNaN(n)) return NaN;
 
   // Sudah dalam rentang normal → kembalikan apa adanya
   if (isLat  && n >= -90   && n <= 90)  return n;
   if (!isLat && n >= -180  && n <= 180) return n;
 
-  // Coba bagi sampai masuk rentang (maksimal 9 digit desimal)
+  // Koordinat tanpa titik desimal (mis: -2608911 → -2.608911, 140667571 → 140.667571)
+  // Prioritaskan kandidat yang masuk rentang geografis Indonesia terlebih dahulu
+  var LAT_MIN = -12, LAT_MAX = 7;
+  var LON_MIN = 94,  LON_MAX = 142;
   var divisors = [10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000];
   for (var i = 0; i < divisors.length; i++) {
     var candidate = n / divisors[i];
-    if (isLat  && candidate >= -90  && candidate <= 90)  return candidate;
-    if (!isLat && candidate >= -180 && candidate <= 180) return candidate;
+    if (isLat  && candidate >= LAT_MIN && candidate <= LAT_MAX) return candidate;
+    if (!isLat && candidate >= LON_MIN && candidate <= LON_MAX) return candidate;
+  }
+  // Fallback: rentang global
+  for (var j = 0; j < divisors.length; j++) {
+    var c2 = n / divisors[j];
+    if (isLat  && c2 >= -90  && c2 <= 90)  return c2;
+    if (!isLat && c2 >= -180 && c2 <= 180) return c2;
   }
   return n; // tidak bisa dinormalisasi, kembalikan aslinya
 }
