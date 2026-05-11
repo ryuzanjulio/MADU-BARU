@@ -1862,7 +1862,74 @@ var tabSebelumDetail = 0, rekapSudahMuat = false, pinBuffer = '', currentTab = 0
 var pinGarduBuffer = '';
 var currentULP = '';  // '' = semua ULP (admin atau belum login)
 
+// ── [QR SCAN MODE] Deteksi URL parameter dari barcode ─────────
+// Jika URL mengandung ?direct=1&noGardu=XXX → bypass login,
+// langsung tampilkan detail gardu dalam mode read-only.
+var QR_SCAN_MODE = false;
+var QR_NOGARDU   = '';
+
+(function detectQRMode() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('direct') === '1' && params.get('noGardu')) {
+    QR_SCAN_MODE = true;
+    QR_NOGARDU   = decodeURIComponent(params.get('noGardu'));
+  }
+})();
+
 window.onload = function(){
+  // ── MODE SCAN QR: bypass login, langsung detail ──────────────
+  if (QR_SCAN_MODE && QR_NOGARDU) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('bottom-nav').style.display   = 'none';
+    TAB_IDS.forEach(function(tid){ document.getElementById(tid).classList.remove('active'); });
+
+    // Tampilkan banner "mode scan" di topbar detail
+    var topbarSub = document.querySelector('#detail-view .topbar-sub');
+    if (topbarSub) topbarSub.textContent = '📷 Mode Scan — Hanya Baca';
+
+    // Ubah tombol ← menjadi 🔑 untuk petugas yang mau login
+    var btnBack = document.querySelector('#detail-view .topbar-back');
+    if (btnBack) {
+      btnBack.innerHTML = '🔑';
+      btnBack.title     = 'Login ke Aplikasi';
+      btnBack.onclick   = function(){
+        window.location.href = window.location.pathname;
+      };
+    }
+
+    document.getElementById('detail-view').style.display = 'block';
+    document.getElementById('detail-view-title').textContent = QR_NOGARDU;
+    document.getElementById('detail-content').innerHTML =
+      '<div class="loading"><div class="spinner"></div>Memuat data gardu...</div>';
+
+    apiGet({ action: 'getDetailLengkap', noGardu: QR_NOGARDU }, function(res) {
+      if (res.status !== 'ok' || !res.data) {
+        document.getElementById('detail-content').innerHTML =
+          '<div class="alert alert-err" style="margin-bottom:var(--sp-sm);">❌ ' +
+          (res.message || 'Data gardu tidak ditemukan.') + '</div>' +
+          '<div style="padding:var(--sp-md);text-align:center;font-size:var(--fs-sm);color:var(--pln-text3);">' +
+          'Pastikan No. Gardu benar atau hubungi administrator.</div>';
+        return;
+      }
+      renderDetailGardu(res.data, res.riwayat || []);
+
+      // Banner login di bawah konten
+      var content = document.getElementById('detail-content');
+      var banner = document.createElement('div');
+      banner.style.cssText = 'margin:var(--sp-md) 0;padding:var(--sp-md);background:var(--pln-biru-pale);border-radius:var(--radius-sm);border:1px solid var(--pln-border2);text-align:center;';
+      banner.innerHTML =
+        '<div style="font-size:var(--fs-xs);color:var(--pln-text3);margin-bottom:var(--sp-sm);">📷 Anda mengakses via scan QR Code</div>' +
+        '<button onclick="window.location.href=window.location.pathname" class="btn btn-blue" style="font-size:var(--fs-sm);padding:10px 20px;">' +
+        '🔑 Login untuk Edit / Input Inspeksi</button>';
+      content.appendChild(banner);
+    });
+
+    document.getElementById('scanner-manual').addEventListener('keydown', function(e){ if(e.key==='Enter') cariGarduDariScanner(); });
+    document.getElementById('scanner-modal').addEventListener('click', function(e){ if(e.target===this) tutupScanner(); });
+    return; // stop — tidak perlu cek session
+  }
+
+  // ── MODE NORMAL: cek sesi login ───────────────────────────────
   var session = getSession();
   if (session) {
     // Sudah login — sembunyikan login screen & lanjut
