@@ -1946,6 +1946,31 @@ window.onload = function(){
   document.getElementById('scanner-modal').addEventListener('click', function(e){ if(e.target===this) tutupScanner(); });
 };
 
+// ── [GPS FIX] Normalisasi koordinat dari Spreadsheet ──────────
+// Spreadsheet Indonesia sering pakai koma sebagai desimal,
+// sehingga -2.611449 tersimpan sebagai -2611449 atau -2611449000.
+// Fungsi ini otomatis koreksi berdasarkan rentang nilai wajar:
+//   Latitude  Papua: -1 s/d -9
+//   Longitude Papua: 130 s/d 141
+function normalizeCoord(val, isLat) {
+  if (val === '' || val === null || val === undefined) return NaN;
+  var n = typeof val === 'number' ? val : parseFloat(String(val).replace(',','.'));
+  if (isNaN(n)) return NaN;
+
+  // Sudah dalam rentang normal → kembalikan apa adanya
+  if (isLat  && n >= -90   && n <= 90)  return n;
+  if (!isLat && n >= -180  && n <= 180) return n;
+
+  // Coba bagi sampai masuk rentang (maksimal 9 digit desimal)
+  var divisors = [10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000];
+  for (var i = 0; i < divisors.length; i++) {
+    var candidate = n / divisors[i];
+    if (isLat  && candidate >= -90  && candidate <= 90)  return candidate;
+    if (!isLat && candidate >= -180 && candidate <= 180) return candidate;
+  }
+  return n; // tidak bisa dinormalisasi, kembalikan aslinya
+}
+
 function apiGet(params, cb) {
   var url = API_URL + '?' + Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
   var controller = new AbortController();
@@ -2207,8 +2232,8 @@ function bukaDetailGardu(noGardu){
 function renderDetailGardu(g, riwayat){
   var statusOp  = (g['STATUS_OPERASIONAL']||'').toUpperCase();
   var isAktif   = statusOp === 'AKTIF';
-  var lat = parseFloat(g['LATITUDE'] || g['Y'] || '');
-  var lon = parseFloat(g['LONGITUDE'] || g['X'] || '');
+  var lat = normalizeCoord(g['LATITUDE'] !== undefined && g['LATITUDE'] !== '' ? g['LATITUDE'] : (g['Y'] || ''), true);
+  var lon = normalizeCoord(g['LONGITUDE'] !== undefined && g['LONGITUDE'] !== '' ? g['LONGITUDE'] : (g['X'] || ''), false);
   var hasGps = !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
   var mapsUrl = hasGps ? 'https://maps.google.com/?q='+lat+','+lon : '';
   var kapasitas = g['KAPASITAS_KVA'] || g['DAYA_KVA'] || '—';
